@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Nope</title>
+    <script src="//cdn.jsdelivr.net/npm/phaser@3.11.0/dist/phaser.js"></script>
+    <style type="text/css">
+        body {
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+
+<script type="text/javascript">
+
+    var JUMPSPEED = -490;
+    var GRAVITY = 600;
+    var PLAYERGLIDEGRAVITY = -500;
+    var WALKSPEED = 340;
+    var PLAYERBOUNCE = 0.0;
+    var ROBOTBOUNCE = 0.7;
+    var BOMBBOUNCE = 0.98;
+    var SLIDEDURATION = 500;
+    var ATTACKDURATION = 500;
+    var POTIONBOUNCE = 0.25
+    var TRANSPARENCYTIME = 12;
+
+
+    const STATE_STANDING = 0;
+    const STATE_SLIDING = 1;
+    const STATE_RUNNING = 2;
+    const STATE_JUMPING = 3;
+    const STATE_GLIDING = 4;
+    const STATE_ATTACKING = 5;
+    const STATE_DEAD = 6;
+
+    const DIRECTION_LEFT = 0;
+    const DIRECTION_RIGHT = 1;
+
+
+    var config = {
+        type: Phaser.AUTO,
+        width: 800,
+        height: 600,
+        physics: {
+            default: 'arcade',
+            arcade: {
+                gravity: { y: GRAVITY },
+                debug: false
+            }
+        },
+        scene: {
+            preload: preload,
+            create: create,
+            update: update
+        }
+    };
+    // Score variables
+    var score = 0;
+    var highScore = 0;
+
+    // Score game objects
+    var scoreText;
+    var highScoreText;
+    var pausedText;
+    var GameOverText;
+    var potionText;
+
+    // Player state variables
+    var playerState = STATE_JUMPING;
+    var playerDirection = DIRECTION_RIGHT;
+    var isPaused = false;
+    var pausedDown = false;
+    var isTransparent = false;
+
+    // Game objects
+    var robot;
+
+    // Potion variables
+    var isPotionSpawned = false;
+
+
+
+
+
+    var game = new Phaser.Game(config);
+
+    function preload ()
+    {
+        this.load.image('sky', 'assets/night.png');
+        this.load.image('ground', 'assets/platform.png');
+        this.load.image('ground2', 'assets/platform2.png');
+        this.load.image('metalground', 'assets/metalplatform.png');
+        this.load.image('star', 'assets/star.png');
+        this.load.image('potion', 'assets/potion.png');
+        this.load.image('bomb', 'assets/bomb.png');
+        this.load.image('robot', 'assets/robot.png');
+        this.load.image('particlered', 'assets/particlered.png');
+        this.load.spritesheet('dude', 'assets/dude.png', {
+            frameWidth: 32, frameHeight: 48
+        });
+        this.load.spritesheet('ninja', 'assets/ninja.png', {
+            frameWidth: 48, frameHeight: 48
+        });
+    }
+
+    function createAnimations (anims)
+    {
+        anims.create({
+            key: 'left',
+            frames: anims.generateFrameNumbers('ninja', { frames: [19, 18, 17, 16, 15, 14, 13, 12, 11, 10] }),
+            frameRate: 10,
+            repeat: -1
+        });
+
+        anims.create({
+            key: 'stopright',
+            frames: [ { key: 'ninja', frame: 1 } ],
+            frameRate: 20
+        });
+
+
+        anims.create({
+            key: 'stopleft',
+            frames: [ { key: 'ninja', frame: 18 } ],
+            frameRate: 20
+        });
+
+        anims.create({
+            key: 'right',
+            frames: anims.generateFrameNumbers('ninja', { start: 0, end: 9 }),
+            frameRate: 10,
+            repeat: -1
+        });
+
+        anims.create({
+            key: 'jumpleft',
+            frames: anims.generateFrameNumbers('ninja', { frames: [59, 58, 57, 56, 55, 54, 53, 52, 51, 50] }),
+            frameRate: 10,
+            repeat: 10
+        });
+
+        anims.create({
+            key: 'jumpright',
+            frames: anims.generateFrameNumbers('ninja', { start: 40, end: 49 }),
+            frameRate: 10,
+            repeat: 10
+        });
+
+        anims.create({
+            key: 'attackright',
+            frames: anims.generateFrameNumbers('ninja', { start: 20, end: 29 }),
+            frameRate: 10,
+            repeat: 10
+        });
+
+        anims.create({
+            key: 'attackleft',
+            frames: anims.generateFrameNumbers('ninja', { frames: [39, 38, 37, 36, 35, 34, 33, 32, 31, 30] }),
+            frameRate: 10,
+            repeat: 10
+        });
+
+        anims.create({
+            key: 'slideright',
+            frames: anims.generateFrameNumbers('ninja', { start: 60, end: 69 }),
+            frameRate: 10,
+            repeat: 10
+        });
+
+        anims.create({
+            key: 'slideleft',
+            frames: anims.generateFrameNumbers('ninja', { frames: [79, 78, 77, 76, 75, 74, 73, 72, 71, 70] }),
+            frameRate: 10,
+            repeat: 10
+        });
+
+        anims.create({
+            key: 'glideright',
+            frames: anims.generateFrameNumbers('ninja', { start: 80, end: 89 }),
+            frameRate: 10,
+            repeat: 10
+        });
+
+        anims.create({
+            key: 'glideleft',
+            frames: anims.generateFrameNumbers('ninja', { frames: [99, 98, 97, 96, 95, 94, 93, 92, 91, 90] }),
+            frameRate: 10,
+            repeat: 10
+        });
+    }
+
+    function create ()
+    {
+        this.add.image(400, 300, 'sky');
+        platforms = this.physics.add.staticGroup();
+
+        platforms.create(400, 584, 'metalground');
+
+        platforms.create(600, 400, 'ground2');
+        platforms.create(50, 250, 'ground2');
+        platforms.create(300, 300, 'ground2');
+        platforms.create(750, 220, 'ground2');
+
+        player = this.physics.add.sprite(100, 450, 'ninja');// 'dude');
+
+        player.setBounce(PLAYERBOUNCE);
+        player.setCollideWorldBounds(true);
+
+        createAnimations(this.anims);
+
+        this.physics.add.collider(player, platforms);
+
+        cursors = this.input.keyboard.createCursorKeys();
+        cursors.w = this.input.keyboard.addKey('W');
+        cursors.a = this.input.keyboard.addKey('A');
+        cursors.s = this.input.keyboard.addKey('S');
+        cursors.d = this.input.keyboard.addKey('D');
+
+        stars = this.physics.add.group({
+            key: 'star',
+            repeat: 11,
+            setXY: { x: 12, y: 0, stepX: 70 }
+        });
+
+        var b = 0.4;
+        stars.children.iterate(function (child) {
+
+            // child.setBounceY(Phaser.Math.FloatBetween(0.4, 0.9));
+            child.setBounceY(b);
+            b = b + 0.05;
+        });
+
+
+        particles = this.add.particles('particlered');
+
+        potion = this.physics.add.sprite(0, 0, 'potion');
+        potion.setBounce(POTIONBOUNCE);
+        potion.disableBody(true, true);
+        potion.setCollideWorldBounds(true);
+        this.physics.add.collider(potion, platforms);
+
+
+        potionEmitter = particles.createEmitter({
+                speed: 50,
+                gravity: { x: 0, y: 800 },
+                scale: { start: 0.1, end: 1 },
+                follow: potion
+            });
+        potionEmitter.setVisible(false);
+
+
+        this.physics.add.collider(stars, platforms);
+
+        this.physics.add.overlap(player, stars, collectStar, null, this);
+
+        this.physics.add.collider(potion, platforms);
+
+        this.physics.add.overlap(player, potion, collectpotion, null, this);
+
+
+        bombs = this.physics.add.group();
+
+        this.physics.add.collider(bombs, platforms);
+
+        this.physics.add.collider(player, bombs, hitBaddie, null, this);
+
+
+        robot = this.physics.add.sprite(Phaser.Math.Between(20, 780), 0, 'robot');
+        robot.setBounce(ROBOTBOUNCE);
+        // robot.setCollideWorldBounds(true);
+        robot.setVelocityX(Phaser.Math.Between(-200, 200));
+        this.physics.add.collider(robot, platforms);
+
+        this.physics.add.collider(player, robot, hitBaddie, null, this);
+
+        scoreText = this.add.text(16, 16, 'score: 0', { fontSize: '24px', fill: '#FFF' });
+        highScoreText = this.add.text(300, 16, 'high score: ' + highScore, { fontSize: '24px', fill: '#FFF' });
+
+        pausedText = this.add.text(400, 300, 'Paused', { fontSize: '24px', fill: '#FFF' });
+        pausedText.setVisible(false);
+
+        potionText = this.add.text(600, 16, 'potion: 0', { fontSize: '24px', fill: '#FFF' });
+        potionText.setVisible(false);
+
+        GameOverText = this.add.text(400, 300, 'GameOver', { fontSize: '56px', fill: '#FFF' });
+        GameOverText.setVisible(false);
+    }
+
+    function resetGame ()
+    {
+        score = 0;
+        addScore(0);    // Reset the display
+
+        GameOverText.setVisible(false);
+
+        potion.disableBody(true, true);
+        potionEmitter.setVisible(false);
+        isPotionSpawned = false;
+
+        player.setPosition(100, 450);
+        setPlayerState(STATE_JUMPING);
+        player.body.gravity.y = 0;
+        player.setVelocityX(0);
+        player.setVelocityY(0);
+        player.clearTint();
+
+        // Reset stars
+        stars.children.iterate(function (child)
+        {
+            child.enableBody(true, child.x, 0, true, true);
+        });
+
+        // Get rid of all the bombs
+        bombs.clear(true, true);
+
+        // Reset the robot
+        robot.enableBody(true, Phaser.Math.Between(20, 780), 0, true, true);
+        robot.setVelocityX(Phaser.Math.Between(-200, 200));
+    }
+
+    function collectStar (player, star)
+    {
+        star.disableBody(true, true);
+
+        addScore(10);
+
+        if (stars.countActive(true) === 0)
+        {
+            stars.children.iterate(function (child)
+            {
+                child.enableBody(true, child.x, 0, true, true);
+            });
+
+            var x = (player.x < 400) ? Phaser.Math.Between(400, 800) : Phaser.Math.Between(0, 400);
+
+            var bomb = bombs.create(x, 16, 'bomb');
+            bomb.setBounce(BOMBBOUNCE);
+            bomb.setCollideWorldBounds(true);
+            bomb.setVelocity(Phaser.Math.Between(-200, 200), 20);
+
+        }
+
+        var randomNumber = Phaser.Math.Between(1, 4);
+        if (randomNumber === 1)
+        {
+            spawnPotion();
+        }
+    }
+
+    function collectpotion (player, potion)
+    {
+        potion.disableBody(true, true);
+        potionEmitter.setVisible(false);
+
+        var randomNumber = Phaser.Math.Between(1, 11);
+        if (randomNumber === 1)
+        {
+            playerDies(this);
+        }
+        else
+        {
+            // Player is happy
+            isTransparent = true;
+            player.setAlpha(0.5);
+
+            var secondsLeft = TRANSPARENCYTIME;
+
+            potionText.setVisible(true);
+            potionText.setText('potion: ' + secondsLeft);
+
+            var timerTimer = setInterval(function() {
+                secondsLeft--;
+                potionText.setText('potion: ' + secondsLeft);
+            }, 1000);
+
+            setTimeout(function() {
+                player.setAlpha(1.0);
+                isTransparent = false;
+                isPotionSpawned = false;
+                potionText.setVisible(false);
+                clearInterval(timerTimer);
+            }, (TRANSPARENCYTIME * 1000));
+        }
+    }
+
+
+
+
+
+    function addScore (amount)
+    {
+        score = score + amount;
+        scoreText.setText('score: ' + score);
+        checkHighScoreText();
+    }
+
+    function checkHighScoreText ()
+    {
+        if (score > highScore)
+        {
+            highScore = score;
+            highScoreText.setText('high score: ' + highScore);
+        }
+    }
+
+    function setPlayerState (newState)
+    {
+        if (newState != playerState)
+        {
+            playerState = newState;
+            var labels = ['STANDING', 'SLIDING', 'RUNNING', 'JUMPING', 'GLIDING', 'ATTACKING', 'DEAD'];
+            console.log('New state is ' + labels[playerState] + ",   gravity is " + player.body.gravity.y);
+        }
+    }
+
+    function hitBaddie (player, baddie)
+    {
+        if (!isTransparent)
+        {
+            var isAttacking = (playerState === STATE_SLIDING || playerState === STATE_ATTACKING);
+            var hittingLeft = (playerDirection === DIRECTION_LEFT && player.body.touching.left);
+            var hittingRight = (playerDirection === DIRECTION_RIGHT && player.body.touching.right);
+
+            if (isAttacking && (hittingLeft || hittingRight))
+            {
+                baddie.disableBody(true, true);
+                addScore(50);
+            }
+            else
+            {
+                playerDies(this);
+            }
+        }
+    }
+
+    function playerDies (scene)
+    {
+        scene.physics.pause();
+
+        setPlayerState(STATE_DEAD);
+        player.setTint(0xff0000);
+
+        GameOverText.setVisible(true);
+
+        player.anims.play(playerDirection === DIRECTION_LEFT ? 'stopleft' : 'stopright');
+    }
+
+    function spawnPotion ()
+    {
+        if (!isPotionSpawned)
+        {
+            potion.enableBody(true, 400, 0, true, true);
+            potion.setVelocityX(Phaser.Math.Between(-200, 200));
+            isPotionSpawned = true;
+            potionEmitter.setVisible(true);
+        }
+    }
+
+    function update ()
+    {
+        if ((cursors.down.isDown || cursors.s.isDown) && playerState !== STATE_DEAD)
+        {
+            if (!pausedDown)
+            {
+                pausedDown = true;
+
+                isPaused = !isPaused;
+                if (isPaused)
+                {
+                    this.physics.pause();
+                    pausedText.setVisible(true);
+                }
+                else
+                {
+                    if (playerState !== STATE_DEAD)
+                    {
+                        this.physics.resume();
+                    }
+                    pausedText.setVisible(false);
+                }
+            }
+        }
+        else if (isPaused)
+        {
+            pausedDown = false;
+        }
+        else if (!isPaused)
+        {
+            pausedDown = false;
+
+            switch (playerState)
+            {
+            case STATE_STANDING:
+                if (cursors.left.isDown || cursors.a.isDown)
+                {
+                    playerDirection = DIRECTION_LEFT;
+                    setPlayerState(STATE_RUNNING);
+                    player.anims.play('left', true);
+                }
+                else if (cursors.right.isDown || cursors.d.isDown)
+                {
+                    playerDirection = DIRECTION_RIGHT;
+                    setPlayerState(STATE_RUNNING);
+                    player.anims.play('right', true);
+                }
+                else if (cursors.space.isDown)
+                {
+                    setPlayerState(STATE_ATTACKING);
+                    player.anims.play(playerDirection === DIRECTION_LEFT ? 'attackleft' : 'attackright', true);
+                    setTimeout(function() {
+                        setPlayerState(STATE_STANDING);
+                        player.anims.play(playerDirection === DIRECTION_LEFT ? 'stopleft' : 'stopright');
+                        }, ATTACKDURATION);
+                }
+
+                if ((cursors.up.isDown || cursors.w.isDown) && player.body.touching.down)
+                {
+                    setPlayerState(STATE_JUMPING);
+                    player.setVelocityY(JUMPSPEED);
+                    player.anims.play(playerDirection === DIRECTION_LEFT ? 'jumpleft' : 'jumpright', true);
+                }
+
+                break;
+            case STATE_SLIDING:
+                // Can't do anything!
+                break;
+            case STATE_RUNNING:
+                if (cursors.left.isDown || cursors.a.isDown)
+                {
+                    if (playerDirection !== DIRECTION_LEFT)
+                    {
+                        playerDirection = DIRECTION_LEFT;
+                        player.anims.play('runleft', false);
+                    }
+
+                    if (cursors.space.isDown && player.body.touching.down)
+                    {
+                        setPlayerState(STATE_SLIDING);
+                        player.setVelocityX(-2 * WALKSPEED);
+                        setTimeout(function() {
+                            setPlayerState(STATE_RUNNING);
+                            player.setVelocityX(-WALKSPEED);
+                            player.anims.play('runningleft', true);
+
+                            }, SLIDEDURATION);
+                        player.anims.play('slideleft', true);
+                    }
+                    else
+                    {
+                        player.setVelocityX(-WALKSPEED);
+                    }
+                }
+                else if (cursors.right.isDown || cursors.d.isDown)
+                {
+                    if (playerDirection !== DIRECTION_RIGHT)
+                    {
+                        playerDirection = DIRECTION_RIGHT;
+                        player.anims.play('runright', false);
+                    }
+
+                    if (cursors.space.isDown && player.body.touching.down)
+                    {
+                        setPlayerState(STATE_SLIDING);
+                        player.setVelocityX(2 * WALKSPEED);
+                        setTimeout(function() {
+                            setPlayerState(STATE_RUNNING);
+                            player.setVelocityX(WALKSPEED);
+                            player.anims.play('runningright', true);
+                            }, SLIDEDURATION);
+                        player.anims.play('slideright', true);
+                    }
+                    else
+                    {
+                        player.setVelocityX(WALKSPEED);
+                    }
+                }
+                else
+                {
+                    setPlayerState(STATE_STANDING);
+                    player.setVelocityX(0);
+                    player.anims.play(playerDirection === DIRECTION_LEFT ? 'stopleft' : 'stopright');
+                }
+
+                if ((cursors.up.isDown || cursors.w.isDown) && player.body.touching.down)
+                {
+                    setPlayerState(STATE_JUMPING);
+                    player.setVelocityY(JUMPSPEED);
+                    player.anims.play(playerDirection === DIRECTION_LEFT ? 'jumpleft' : 'jumpright', true);
+                }
+                break;
+            case STATE_JUMPING:
+                if (player.body.touching.down)
+                {
+                    setPlayerState(STATE_STANDING);
+                    player.anims.play(playerDirection === DIRECTION_LEFT ? 'stopleft' : 'stopright');
+                }
+                else
+                {
+                    if (cursors.space.isDown)
+                    {
+                        player.body.gravity.y = PLAYERGLIDEGRAVITY;
+                        setPlayerState(STATE_GLIDING);
+                        player.anims.play(playerDirection === DIRECTION_LEFT ? 'glideleft' : 'glideright', true);
+                    }
+                    else
+                    {
+                        if (cursors.left.isDown || cursors.a.isDown)
+                        {
+                            if (playerDirection !== DIRECTION_LEFT)
+                            {
+                                playerDirection = DIRECTION_LEFT;
+                                player.anims.play('jumpleft');
+                            }
+                            player.setVelocityX(-WALKSPEED);
+                        }
+                        else if (cursors.right.isDown || cursors.d.isDown)
+                        {
+                            if (playerDirection !== DIRECTION_RIGHT)
+                            {
+                                playerDirection = DIRECTION_RIGHT;
+                                player.anims.play('jumpright');
+                            }
+                            player.setVelocityX(WALKSPEED);
+                        }
+                        else
+                        {
+                            player.setVelocityX(0);
+                        }
+                    }
+                }
+                break;
+            case STATE_GLIDING:
+                if (player.body.touching.down)
+                {
+                    setPlayerState(STATE_STANDING);
+                    player.anims.play(playerDirection === DIRECTION_LEFT ? 'stopleft' : 'stopright');
+                    player.body.gravity.y = 0;
+                }
+                else
+                {
+                    if (cursors.left.isDown || cursors.a.isDown)
+                    {
+                        if (playerDirection !== DIRECTION_LEFT)
+                        {
+                            playerDirection = DIRECTION_LEFT;
+                            player.anims.play('glideleft');
+                        }
+                        player.setVelocityX(-WALKSPEED);
+                    }
+                    else if (cursors.right.isDown || cursors.d.isDown)
+                    {
+                        if (playerDirection !== DIRECTION_RIGHT)
+                        {
+                            playerDirection = DIRECTION_RIGHT;
+                            player.anims.play('glideright');
+                        }
+                        player.setVelocityX(WALKSPEED);
+                    }
+                    else
+                    {
+                        player.setVelocityX(0);
+                    }
+                }
+                break;
+            case STATE_ATTACKING:
+                break;
+            case STATE_DEAD:
+                if (cursors.space.isDown)
+                {
+                    resetGame();
+                    // Start er up!
+                    this.physics.resume();
+                }
+                break;
+            }
+        }
+
+        // How's the robot going?
+        if (robot.x < -50 || robot.x > 850)
+        {
+            robot.setPosition(Phaser.Math.Between(20, 780), 0);
+            robot.setVelocityX(Phaser.Math.Between(-200, 200));
+        }
+    }
+
+</script>
+
+</body>
+</html>
